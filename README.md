@@ -28,3 +28,7 @@ conda install conda-forge::astrometry # astrometry.ent
 python pkg
 ---
 astropy, astroquery, photutils, scipy, scikit-image, ray(for multi-processing) etc.
+
+Initial folder setting
+---
+Select location And make folder with name you want. The folder must have named folder that is "LIGHT, DARK, BIAS." The names are must be writen by Capital Alphabet.
