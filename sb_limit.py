@@ -5,7 +5,7 @@ from astropy.coordinates import SkyCoord
 import astropy.units as u
 import matplotlib.pyplot as plt
 import astropy.io.fits as fits
-from astropy.stats import sigma_clipped_stats
+from astropy.stats import sigma_clipped_stats, sigma_clip
 
 from astropy.convolution import convolve
 from photutils.segmentation import detect_sources, make_2dgaussian_kernel, SourceCatalog, deblend_sources
@@ -106,7 +106,7 @@ def region_mask(hdu, thrsh,pix_scale,ampglow=True):
     
     return np.array(masked, dtype=np.int8)
 
-def bkg_std(hdu, mask, size):
+def bkg_std(hdu, mask, size,area=1024):
     std_list = []
     median_list = []
     arr = np.ma.masked_where(mask, np.ma.masked_equal(hdu, 0))#np.where(mask!=0, np.nan, hdu) #
@@ -114,12 +114,11 @@ def bkg_std(hdu, mask, size):
     mean, median, std = sigma_clipped_stats(arr, cenfunc='median', stdfunc='mad_std', sigma=3.)
     return std
     """
-    #plt.imshow(arr1, origin='lower'); plt.show(); sys.exit()
     x,y = arr.shape
     center_x, center_y = int(x/2), int(y/2)
 
     for i in range(1000):
-        rand_st_x, rand_st_y = np.random.randint(center_x-1500, center_x+1500-size, 2)
+        rand_st_x, rand_st_y = np.random.randint(center_x-area//2, center_x+area//2-size, 2)
         bin_arr = arr[rand_st_x:rand_st_x+size, rand_st_y:rand_st_y+size]
         mean, median1, std1 = sigma_clipped_stats(bin_arr, cenfunc='median', stdfunc='mad_std', sigma=3)
         #print(median1, std1);sys.exit()
@@ -138,11 +137,11 @@ def sb_limit(path,obj,pix,std_noise,color):
     sdss = Table.read(path + '/sdss_'+obj+'.csv', format='ascii') #check!! 
 
     #extract coordinate
-    sdsscat = sdss['ra', 'dec', 'g','r']
+    sdsscat = sdss['ra', 'dec', 'g','r','u']
     objcat = data['ALPHAPEAK_J2000','DELTAPEAK_J2000','FLUX_BEST', 'ERRAWIN_IMAGE', 'ERRBWIN_IMAGE']
     #obj_cat = objcat[(objcat['ERRAWIN_IMAGE']<0.01)&(objcat['ERRBWIN_IMAGE']<0.01)]
-    sdss_coord = SkyCoord(ra=sdsscat['ra']*u.degree, dec=sdsscat['dec']*u.degree, frame='fk5')
-    obj_coord = SkyCoord(ra=objcat['ALPHAPEAK_J2000'], dec=objcat['DELTAPEAK_J2000'], frame='fk5')
+    sdss_coord = SkyCoord(ra=sdsscat['ra'], dec=sdsscat['dec'],unit='deg', frame='fk5')
+    obj_coord = SkyCoord(ra=objcat['ALPHAPEAK_J2000'], dec=objcat['DELTAPEAK_J2000'],unit='deg', frame='fk5')
 
 
     idx1, d2d1, d3d1 = sdss_coord.match_to_catalog_sky(obj_coord)
@@ -154,44 +153,49 @@ def sb_limit(path,obj,pix,std_noise,color):
     sdss_mag = sdss_data[color]
     count = np.array(obj_flux)
     mag = np.array(sdss_mag)
+    u = sdss_data['u']
     g = sdss_data['g']
     r = sdss_data['r']
 
     from astropy.stats import sigma_clipped_stats
 
     m = -2.5*np.log10(count)
-
-
     mM = mag - m
-    #plt.scatter(mag, mM);plt.show();sys.exit()
-
 
     from scipy.optimize import curve_fit
+    
+    z =  sigma_clip(mM, cenfunc='median', stdfunc='mad_std', sigma=3)
+    r1 = r[z.mask==False]
+    g1 = g[z.mask==False]
+    u1 = u[z.mask==False]
+    saturated = mag[z.mask==True]
+    print(f'Fitted star fraction = {len(u1)/len(mag)}')
 
-    def log(x,a,c):
-        return a*np.log10(x)+c 
-    
-    mean, median1, std = sigma_clipped_stats(mM, cenfunc='median', stdfunc='mad_std', sigma=3.0)
-    z = np.where((mM<=median1+3*std)&(mM>=median1-3*std), mM, np.nan) # sigma_clip(mM, cenfunc='median', stdfunc='mad_std', sigma=3) #
-    #mag_ob = m + z
-    r1 = r[~np.isnan(z)]
-    g1 = g[~np.isnan(z)]
-    def std_formular(count1,a,z1):
-        return -2.5*np.log10(count1) + a*(g1-r1) + z1
-    
-    t_r = count[~np.isnan(z)]
+
     if color == 'r':
         c = r1
-    else :
+        l1 = g1
+        l2 = r1
+    elif color == 'g':
         c = g1
+        l1 = g1
+        l2 = r1
+    else :
+        c = u1
+        l1 = u1
+        l2 = g1
+    
+    def std_formular(count1, a,z1):
+        return -2.5*np.log10(count1) + a*(l1-l2) + z1
+    
+    t_r = count[z.mask==False]
+    
     popt,pcov = curve_fit(std_formular,t_r,c)
-    print(popt)
     #print(np.median(popt[0]*(g1-r1)+popt[1]))
     def line(x,a,b):
         return a*(-2.5*np.log10(x)) +b
     
     popt_line,pcov_line = curve_fit(line,t_r,std_formular(t_r,*popt))
-    #print(popt_line[0]*(-2.5))
 
     plt.scatter(count,mag,s=2,c='grey')
     plt.scatter(t_r,std_formular(t_r,*popt),s=2,c='r')
@@ -219,4 +223,4 @@ def sb_limit_proc(path,obj,pix,color):
     sb_limit(path,obj,pix,std_noise,color)
 
 
-sb_limit_proc('/volumes/ssd/Arp142','Arp142',1.89,'r')
+sb_limit_proc('/volumes/ssd/Abell2634','Abell2634',1.89,'u')
