@@ -170,7 +170,7 @@ def sb_limit(path,obj,pix,std_noise,color):
     u1 = u[z.mask==False]
     saturated = mag[z.mask==True]
     print(f'Fitted star fraction = {len(u1)/len(mag)}')
-
+    print(f'Saturated star fraction = {len(saturated)/len(mag)}')
 
     if color == 'r':
         c = r1
@@ -191,21 +191,27 @@ def sb_limit(path,obj,pix,std_noise,color):
     t_r = count[z.mask==False]
     
     popt,pcov = curve_fit(std_formular,t_r,c)
-    #print(np.median(popt[0]*(g1-r1)+popt[1]))
+
+    def stdz_mag(count,a,z_p,l1,l2):
+        conv_const = np.median(a*(l1-l2))
+        mag = -2.5*np.log10(count) + conv_const + z_p
+        return mag
+    
     def line(x,a,b):
         return a*(-2.5*np.log10(x)) +b
     
     popt_line,pcov_line = curve_fit(line,t_r,std_formular(t_r,*popt))
 
     plt.scatter(count,mag,s=2,c='grey')
-    plt.scatter(t_r,std_formular(t_r,*popt),s=2,c='r')
+    #plt.scatter(count, stdz_mag(count, popt[0],popt[1],l1,l2), s=2, c='tomato')
+    plt.scatter(t_r,c,s=2,c='r')#std_formular(t_r,*popt),s=2,c='r')
 
     count.sort()
     plt.plot(count,line(count,*popt_line),c='k',linewidth=1.5)
 
     plt.xscale('log', base=10)
     plt.xlabel('Flux(log10)')
-    plt.ylabel('$\mu_{SDSS,r}$')
+    plt.ylabel(f'$\mu_{color}$')
     sb_lim = popt[1] - 2.5*np.log10(std_noise/(pix*10))
     plt.text(10**3.5, 10, f'$Z_p$ = {popt[1]:.2f}\nSB Limit = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
     plt.title(f'{color}-band SB limit of {obj}')
@@ -217,10 +223,10 @@ def sb_limit(path,obj,pix,std_noise,color):
 
 def sb_limit_proc(path,obj,pix,color):
     hdu = fits.open(path+'/sky_subed/coadd.fits')[0].data
-    mask = region_mask(hdu,1.,1.89,ampglow=False)
+    mask = region_mask(hdu,1.,pix,ampglow=False)
     #mask = fits.open(path+'/mask_IC3280_r.fits')[0].data#region_mask(hdu, 0.99,pix,ampglow=False)
     std_noise, median_arr = bkg_std(hdu,mask,128)
     sb_limit(path,obj,pix,std_noise,color)
 
 
-sb_limit_proc('/volumes/ssd/Abell2634','Abell2634',1.89,'u')
+sb_limit_proc('/volumes/ssd/u_test','NGC784',1.89,'u')
