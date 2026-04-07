@@ -27,11 +27,15 @@ pa = tbl['pa'][1:]
 #sys.exit()
 median = np.median(hdu)#[1500-30:1500+300,1500-300:1500+300])
 std = np.std(hdu)#[1500-300:1500+300,1500-300:1500+300])
+from astropy.visualization import simple_norm
+def norm(x,percent=96):
+    return simple_norm(x,'linear',percent=percent)
+
 fig, ax = plt.subplots(1,3, figsize=(15,5), subplot_kw=dict(projection=wcs), sharex=True, sharey=True) #plt.subplots(subplot_kw=dict(projection=wcs))#
 fig.subplots_adjust(wspace=0.3)
-ax[0].imshow(hdu,vmax=median+3*std, vmin=median-3*std,origin='lower')# median-9*std ,[1500-350:1500+350,1500-350:1500+350],
-ax[1].imshow(model,vmax=median+3*std, vmin=median-3*std,origin='lower')
-ax[2].imshow(hdu-model,vmax=median+3*std, vmin=median-3*std,origin='lower')# median-9*std
+ax[0].imshow(hdu,norm=norm(hdu),origin='lower')# median-9*std ,[1500-350:1500+350,1500-350:1500+350],
+ax[1].imshow(model,norm=norm(model,99.8),origin='lower')
+ax[2].imshow(hdu-model,norm=norm(hdu-model),origin='lower')# median-9*std
 
 for i in range(len(sma)):
     if i%1 == 0:

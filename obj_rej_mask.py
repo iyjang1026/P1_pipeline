@@ -8,6 +8,7 @@ from astropy.coordinates import SkyCoord
 from photutils.segmentation import detect_sources, make_2dgaussian_kernel, SourceCatalog, deblend_sources, SegmentationImage
 from photutils.background import MedianBackground, Background2D
 from photutils.aperture import EllipticalAperture
+from photutils.detection import find_peaks
 from scipy.ndimage import binary_dilation
 from skimage.morphology import disk
 import sys

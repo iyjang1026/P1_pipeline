@@ -48,14 +48,35 @@ from photutils.aperture import EllipticalAperture
 from scipy.ndimage import binary_dilation
 from skimage.morphology import disk
 
-def region_mask(hdu, thrsh,pix_scale,ampglow=True):
-    if ampglow == True:
-        half = disk(100)
-        z_arr = np.zeros_like(hdu)
-        z_arr[2048-100:2048,1212-100-1:1212+100] += half[0:100,:]
-    else :
+def simple_masking(arr):
+    bkg_estimator = MedianBackground()
+    bkg = Background2D(arr, (64,64), filter_size=(3,3), bkg_estimator=bkg_estimator)
+    data = arr - bkg.background
+    threshold = 1.5 * bkg.background_rms
+    kernel = make_2dgaussian_kernel(3.0, size=5)
+    convolved_data = convolve(data, kernel)
+    seg_map = detect_sources(convolved_data, threshold, npixels=30)
+    mask_map = np.array(seg_map)
+    kernel = disk(10)
+    mask_map_d = binary_dilation(mask_map, kernel, iterations=3)
+    masked = np.where((mask_map_d!=0), 1, 0)
+    return masked.astype(np.int8)
+
+def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
+    if type(ampglow)==bool:
+        if ampglow==True:
+            half = disk(disk_r)
+            z_arr = np.zeros_like(hdu)
+            z_arr[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+    elif type(ampglow) == np.ndarray:
+        half = disk(disk_r)
+        z_arr0 = np.array(ampglow) #np.where(ampglow!=0,False,True)
+        z_arr0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+        z_arr = np.where(z_arr0!=0,1,0)
+
+    else:
         half = None
-        z_arr = np.where(hdu!=0,False,True)
+        z_arr = np.where(hdu!=0, False, True)
     
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=z_arr)
@@ -130,17 +151,20 @@ def region_mask(hdu, thrsh,pix_scale,ampglow=True):
     kernel0 = disk(3) 
     seg_d= binary_dilation(seg, kernel0, iterations=1)
     masked_map = np.where(seg_d!=0, 1, 0) + arr_zero
-    if type(half) == np.ndarray:
-        masked_map[2048-100:2048,1212-100-1:1212+100] += half[0:100,:]
+    if type(ampglow)!=np.ndarray:
+        if ampglow == True:
+            masked_map[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
+    elif type(half)==np.ndarray:
+        if type(ampglow)==np.ndarray:
+            masked_map += z_arr
     
     masked = np.where(masked_map!=0, 1, 0).astype(np.int8)
-    
     return np.array(masked, dtype=np.int8)
 
 @ray.remote
-def mask(hdul,i,ext_type=0):
+def mask(hdul,i,pix,amp_r,amp_mask=True,ext_type=0):
     hdu = fits.open(hdul[i])[0].data
-    mask = region_mask(hdu, 0.99,1.86,ampglow=True)
+    mask = region_mask(hdu, 0.99,pix,disk_r=amp_r,ampglow=amp_mask)
     n = format(i,'04')
     save_fits(path+'/mask','mask_'+str(n),data=mask,ext_type=ext_type)
 
@@ -193,8 +217,8 @@ def sky_model(data, bin, order=2):
         """
         the center position of binned pixel
         """
-        xx_m = np.arange(0,img_width, img_width/bin)
-        yy_m = np.arange(0, img_height, img_height/bin)
+        xx_m = np.arange(0,img_width, img_width/bin) + new_width//2
+        yy_m = np.arange(0, img_height, img_height/bin) +new_height//2
 
         x_m = np.array([[i for i in xx_m] for j in yy_m])
         y_m = np.array([[j for i in xx_m] for j in yy_m])
@@ -227,12 +251,10 @@ def sky_model(data, bin, order=2):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             model = fit_p(p_init, x_m, y_m, data_nc) #하늘의 모델을 반환(x,y)
-        fits.writeto(path+'/sky_model.fits',model(x1,y1),overwrite=True)
+        #fits.writeto(path+'/sky_model.fits',model(x1,y1),overwrite=True)
         return model(x1, y1)
 
-#from sky_sub import seg_sky_model
-#from rbf_skysub import sky_model
-
+from rbf_skysub import rbf_sky_model
 @ray.remote
 def sky_sub(pp_list, mask_list,obj,i,ext_type=0):
         n = format(i,'04')
@@ -240,7 +262,7 @@ def sky_sub(pp_list, mask_list,obj,i,ext_type=0):
         hdr = fits.open(pp_list[i])[0].header
         mask = fits.open(mask_list[i])[0].data
         m_data = np.ma.masked_array(hdu, mask, dtype=np.float32)#np.where(mask!=0,np.nan, hdu) #np.ma.masked_where(mask, hdu) #
-        sky = sky_model(m_data, 8).astype(np.float32)
+        sky = sky_model(m_data, 64).astype(np.float32)
         subed = np.array(hdu-sky).astype(np.float32)
         hdr.append(('sky_sub', 'Python', 'sky subtraction' ))
         save_fits(path+'/sky_subed',obj+'_'+str(n),data=subed,hdr=hdr,ext_type=ext_type)
@@ -252,8 +274,7 @@ def astrometry(path, obj_name, radius,ext_type=0):
         ext = '.fits'
     else :
         ext = '.fit'
-    tbl = radec(obj_name)
-    ra,dec = tbl['RA'][0], tbl['DEC'][0]
+    ra,dec = radec(obj_name)
     file = open(path+'/'+obj_name+'.sh', 'w')
     file.write(f'solve-field --index-dir /Users/jang-in-yeong/solve/index4100 --use-source-extractor -3 {ra} -4 {dec} -5 {radius} --no-plots *'+ext+' \nrm -rf *.xyls *.axy *.corr *.match *.new *.rdls *.solved\nulimit -n 4096')
     file.close()
@@ -266,14 +287,19 @@ def full_proc(path,obj,ext_type):
     mkdir(path, 'process')
     bias = master_bias(path,ext_type)
     dark = master_dark(path, bias,ext_type)
+    
+    amp_mask = simple_masking(dark)
+    
     mkdir(path,'db_subed')
     db_sub(path, bias, dark,ext_type=ext_type)
     prt_process('db_subd')
+    
     hdul = imp(path+'/db_subed',ext_type=ext_type)
     
     mkdir(path, 'mask')
     ray.init(num_cpus=8)
-    ray.get([mask.remote(hdul, i,ext_type=ext_type) for i in range(len(hdul))])
+    ray.get([mask.remote(hdul,i,pix=1.89,amp_r=300,
+                         amp_mask=amp_mask,ext_type=ext_type) for i in range(len(hdul))])
     ray.shutdown()
     prt_process('masking')
     """
@@ -288,21 +314,23 @@ def full_proc(path,obj,ext_type):
     """
     pp_list = imp(path+'/pp',ext_type=ext_type)
     mkdir(path,'sky_subed')
+    
     """
     for i in range(len(pp_list)):
         sky_sub(pp_list,mask_list,obj,i,ext_type=ext_type)
     """
+    
     ray.init(num_cpus=8)
     ray.get([sky_sub.remote(pp_list,mask_list,obj,i,ext_type=ext_type) for i in range(len(pp_list))])
     ray.shutdown()
     prt_process('sky sub')
-
+    """
     astrometry(path,obj,1.5,ext_type=1)
     prt_process('proc')
     sys.exit()
-
-path = '/volumes/ssd/NGC4236'    
-full_proc(path,'NGC4236',1)
+    """
+path = '/volumes/ssd/u_test'    
+full_proc(path,'NGC784',1)
 """
 obj = 'Arp142'
 hdu = fits.open(path+'/pp/pp_'+obj+'0000.fit')[0].data 

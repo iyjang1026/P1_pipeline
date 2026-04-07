@@ -13,18 +13,15 @@ from photutils.aperture import EllipticalAperture
 import matplotlib.pyplot as plt
 import os
 
-def detect(hdul, mask,i, ra,dec):
+def detect(hdul, mask, ra,dec,pix,i=0):
     hdu0 = hdul[0].data
     hdr = hdul[0].header
-    #hdu = np.ma.masked_where(mask|(hdu0>1500),np.ma.masked_equal(hdu0, np.zeros(shape=hdu0.shape)))
-    hdu = np.ma.masked_where(mask,np.ma.masked_equal(hdu0, np.zeros(shape=hdu0.shape))-i)
-    #plt.imshow(hdu, origin='lower');plt.show();sys.exit()
-    #hdu = hdu1 +abs(np.min(hdu0))#3*np.ma.std(hdu1) #테두리와 region 마스크를 적용
+    hdu = np.ma.masked_where(mask,np.ma.masked_equal(hdu0, np.zeros(shape=hdu0.shape))-i) #테두리와 region 마스크를 적용
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(3,3), bkg_estimator=bkg_est) #배경추출
     data = hdu - bkg.background #background 제거
     threshold = 3.*bkg.background_rms #threshold 설정
-    kernel = make_2dgaussian_kernel(fwhm=3.0, size=5)
+    kernel = make_2dgaussian_kernel(fwhm=3.0/pix, size=5)
     conv_hdu = convolve(data, kernel)
     seg_map = detect_sources(conv_hdu, threshold, npixels=5) #1차 천체 탐지
     
@@ -57,7 +54,7 @@ def detect(hdul, mask,i, ra,dec):
 def ellipse(path,hdu1,mask, geometry, sma):    
     hdu = np.ma.array(hdu1,mask=mask)
     ellipse = Ellipse(hdu, geometry)
-    isolist = ellipse.fit_image(sma0=0.8*sma,minsma=0.01*sma,maxsma=2.*sma, integrmode='median',step=0.15, sclip=3.0, nclip=3, fflag=0.3, fix_center=True) #isophote
+    isolist = ellipse.fit_image(sma0=0.8*sma,minsma=0.01*sma,maxsma=2.5*sma, integrmode='median',step=0.1, sclip=3.0, nclip=3, fflag=0.3, fix_center=True) #isophote
     tbl = isolist.to_table()    
     tbl.write(path+'/iso_tbl_test.csv', format='ascii.csv', overwrite=True)
     print(tbl)
@@ -65,14 +62,15 @@ def ellipse(path,hdu1,mask, geometry, sma):
     
     model = build_ellipse_model(hdu.shape, isolist) #modeling
     return model, tbl#, np.ma.std(hdu)
-    
+"""
 from io_fits import radec
 
 path = '/volumes/ssd/test/'
-hdul = fits.open(path+'/ngc4236.fits')
-mask = fits.open(path+'/obj_rejec_NGC4236.fits')[0].data 
-ra,dec = radec('NGC 4236')
-geo,sma = detect(hdul,mask,0,ra,dec)
+hdul = fits.open(path+'/sky_subed/coadd.fits')
+mask = fits.open(path+'/obj_rejec_M101.fits')[0].data 
+ra,dec = radec('M101')
+geo,sma = detect(hdul,mask,ra,dec,1.89)
 model, tbl = ellipse(path,hdul[0].data,mask,geo,sma)
-fits.writeto(path+'/model.fits',model,overwrite=True)
+#fits.writeto(path+'/model.fits',model,overwrite=True)
 sys.exit()
+"""
