@@ -77,3 +77,4 @@ ax[0].imshow(data,norm=norm(data),origin='lower')
 ax[1].imshow(model, norm=norm(model), origin='lower')
 ax[2].imshow(residual, norm=norm(residual), origin='lower')
 plt.show()
+

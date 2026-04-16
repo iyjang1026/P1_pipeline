@@ -118,7 +118,8 @@ def bkg_std(hdu, mask, size,area=1024):
     center_x, center_y = int(x/2), int(y/2)
 
     for i in range(1000):
-        rand_st_x, rand_st_y = np.random.randint(center_x-area//2, center_x+area//2-size, 2)
+        rand_st_x = np.random.randint(center_x-area//2, center_x+area//2-size)
+        rand_st_y = np.random.randint(center_y-area//2, center_y+area//2-size)
         bin_arr = arr[rand_st_x:rand_st_x+size, rand_st_y:rand_st_y+size]
         mean, median1, std1 = sigma_clipped_stats(bin_arr, cenfunc='median', stdfunc='mad_std', sigma=3)
         #print(median1, std1);sys.exit()
@@ -212,11 +213,11 @@ def sb_limit(path,obj,pix,std_noise,color):
     plt.xscale('log', base=10)
     plt.xlabel('Flux(log10)')
     plt.ylabel(f'$\mu_{color}$')
-    sb_lim = popt[1] - 2.5*np.log10(std_noise/(pix*10))
+    sb_lim = popt[1] - 2.5*np.log10(3*std_noise/(pix*10))
     plt.text(10**3.5, 10, f'$Z_p$ = {popt[1]:.2f}\nSB Limit = {sb_lim:.2f}', bbox={'boxstyle':'square', 'fc':'white'})
     plt.title(f'{color}-band SB limit of {obj}')
     print(f'Z_p is {popt[1]}')
-    print(f'SB Limit is {sb_lim}')
+    print(f'SB Limit is {sb_lim}\nstdz offset = {np.median(popt[0]*(l1-l2))+popt[1]:.2f}')
     plt.show()
 
 #from ccdproc import region_mask
@@ -229,4 +230,4 @@ def sb_limit_proc(path,obj,pix,color):
     sb_limit(path,obj,pix,std_noise,color)
 
 
-sb_limit_proc('/volumes/ssd/u_test','NGC784',1.89,'u')
+sb_limit_proc('/volumes/ssd/test','M101',1.89,'r')

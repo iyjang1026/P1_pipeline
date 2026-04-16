@@ -33,8 +33,8 @@ def step_func(x, d):
     step = [x<d]
     return step
 
-def sum_profile(x,a1,r_eff,a2,r_s):
-    sum = sersic(x,a1,r_eff,4) + exponential(x,a2, r_s)
+def sum_profile(x,a1,r_eff,n,a2,r_s):
+    sum = sersic(x,a1,r_eff,n) + exponential(x,a2, r_s)
     return sum
 
 def log_err(intens_err,intens):
@@ -53,33 +53,34 @@ from ellipse_fit import detect
 def init_param(x,intens,obj,hdul,mask):
     ra,dec = radec(obj)
     geo, sma = detect(hdul,mask,ra,dec,1.89)
-    r_eff = sma
     i_0 = intens[0]
     i_hr = i_0 / np.exp(1)
-    idx = np.where(abs(x-r_eff)==np.min(abs(x-r_eff)))
-    amp_b = intens[idx]
     sma_idx = np.where(abs(intens-i_hr)==np.min(abs(intens-i_hr)))
     r_s = x[sma_idx]
-    rand = np.random.randint(0,10)/10 #noise
 
-    return amp_b[0],r_eff,i_0,r_s[0]
+    r_eff = sma
+    idx = np.where(abs(x-r_eff)==np.min(abs(x-r_eff)))
+    amp_b = intens[idx]
+
+    return amp_b[0],r_eff,4,i_0,r_s[0]
 
 def decomposition(path,obj):
-    hdul = fits.open(path+'/ngc4236.fits')
-    mask = fits.open(path+'/obj_rejec_NGC4236.fits')[0].data
+    hdul = fits.open(path+'/'+obj+'.fits')
+    mask = fits.open(path+'/obj_rejec_'+obj+'.fits')[0].data
+    cut = 5
+    tbl = imp_tbl(path+'/iso_tbl_'+obj+'.csv')
+    intens = tbl['intens'][:-cut]
 
-    tbl = imp_tbl(path+'/iso_tbl_test1.csv')
-    intens = tbl['intens']
-    intens_err = tbl['intens_err']
+    intens_err = tbl['intens_err'][:-cut]
     z_p = 27
 
-    sma0 = tbl['sma']
-    sma = arcsec(sma0)
+    sma = tbl['sma'][:-cut]
+    sma0 = arcsec(sma)
+
     popt_raw = []
     for i in range(1):
-        init_list= [init_param(sma0,intens,obj,hdul,mask)]
-        #print(init_list);sys.exit() #amp_b,amp_d,r_eff_1,r_eff_2,n,r_s 
-        popt, pcov = curve_fit(sum_profile, sma0,intens,p0=init_list,maxfev=8000, sigma=log_err(intens_err,intens))
+        init_list= [init_param(sma,intens,obj,hdul,mask)]
+        popt, pcov = curve_fit(sum_profile, sma,intens,p0=init_list,maxfev=8000)#, sigma=intens_err)#log_err(intens_err,intens))
         popt_raw.append(popt)
     popt_arr = np.array(popt_raw)
     mena, popt,std = sigma_clipped_stats(popt_arr, axis=0, cenfunc='median',stdfunc='mad_std',sigma=3)#np.median(popt_arr,axis=0)

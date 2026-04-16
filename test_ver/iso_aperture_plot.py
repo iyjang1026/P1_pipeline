@@ -9,13 +9,14 @@ import sys
 
 path = '/volumes/ssd/test'
 #color = 'r'
-title = 'NGC 4236'
-hdl = fits.open(path+'/ngc4236.fits')
-model = fits.open(path+'/model.fits')[0].data
+title = 'NGC4236'
+hdl = fits.open(path+'/NGC4236.fits')
+model = fits.open(path+'/model_NGC4236.fits')[0].data
+norm_model = (model - np.min(model))/(np.max(model)-np.min(model))
 hdu = hdl[0].data
 hdr = hdl[0].header
 wcs = WCS(hdr)
-tbl = Table.read(path+'/iso_tbl_test.csv', format='ascii.csv')
+tbl = Table.read(path+'/iso_tbl_NGC4236.csv', format='ascii.csv')
 mean, median, std = sigma_clipped_stats(hdu, cenfunc='median', stdfunc='mad_std', sigma=3)
 
 sma = tbl['sma'][1:]

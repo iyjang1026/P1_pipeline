@@ -12,7 +12,7 @@ from scipy.ndimage import binary_dilation
 from skimage.morphology import disk
 import sys
 
-def obj_rej_mask(hdu, thrsh,hdr,ra,dec):
+def psf_obj_rej_mask(hdu, thrsh,hdr,ra,dec):
     mask1 = np.where(hdu!=0, False, True)
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(3,3), bkg_estimator=bkg_est, mask=mask1)

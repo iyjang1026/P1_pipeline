@@ -6,7 +6,7 @@ def mkdir(path, name):
     if not os.path.exists(path + '/'+name):
         os.mkdir(path +'/'+ name)
 
-def imp(path, ext_type=0):
+def file_list(path, ext_type=0):
     if ext_type == 0:
         ext = '.fits'
     elif ext_type == 1:
@@ -22,6 +22,7 @@ def save_fits(path,name, data,hdr=None, ext_type=0, overwrite=True):
     elif ext_type == 1:
         ext = '.fit'
     fits.writeto(path+'/'+name+ext, data,header=hdr, overwrite=overwrite)
+    #print(name + 'is/are saved at'+ path)
     
 from astroquery.ipac.ned import Ned
 from astroquery.simbad import Simbad
@@ -37,5 +38,6 @@ def radec(obj_name, catalog='simbad'):
 def prt_process(input):
     print(input + ' is/are done.')
 
-#print(imp('/volumes/ssd/test/bias',1))
-#mkdir('/volumes/ssd/test','test')
+from astropy.visualization import simple_norm
+def norm(x):
+    return simple_norm(x, 'linear', percent=99)
