@@ -23,6 +23,7 @@ def simple_masking(arr):
     return masked.astype(np.int8)
 
 def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
+    z_arr = np.ma.masked_equal(hdu, 0)
     if type(ampglow)==bool:
         if ampglow==True:
             half = disk(disk_r)
@@ -37,9 +38,6 @@ def region_mask(hdu, thrsh,pix_scale,disk_r=100,ampglow=True):
         z_arr0[2048-disk_r:2048,1212-disk_r-1:1212+disk_r] += half[0:disk_r,:]
         z_arr = np.where(z_arr0!=0,1,0)
 
-    
-   
-    
     bkg_est = MedianBackground()
     bkg = Background2D(hdu, (64,64), filter_size=(5,5), bkg_estimator=bkg_est, mask=z_arr)
     data = hdu - bkg.background

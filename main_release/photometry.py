@@ -128,7 +128,7 @@ def sb_limit_proc(path=str,obj=str,pix=float,color=str):
     mask = region_mask(hdu,1.,pix,ampglow=False)
     phot = Phot(path, obj,pix)
     std_noise = phot.bkg_std(hdu,mask,128)
-    a, zp = phot.phot_stdz('r', plot=True)
+    a, zp = phot.phot_stdz(color, plot=True)
     
 
-#sb_limit_proc('/volumes/ssd/test/', 'M101',1.89,'r')
+sb_limit_proc('/volumes/ssd/test', 'M101',1.89,'r')
